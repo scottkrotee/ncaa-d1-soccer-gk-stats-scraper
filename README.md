@@ -18,9 +18,7 @@ To run this script, you'll need Python installed on your system along with the f
 
 You can install these dependencies using pip:
 
-```bash
 pip install requests beautifulsoup4 pandas
-
 
 ## Output
 Upon successful execution, the script will save the scraped data into an Excel file named ncaa_d1_soccer_goalkeeper_stats.xlsx in the same directory as the script. If there is an error during fetching or processing, the script will output an appropriate error message.
