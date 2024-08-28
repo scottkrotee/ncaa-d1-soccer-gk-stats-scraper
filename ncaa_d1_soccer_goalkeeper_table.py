@@ -1,5 +1,5 @@
 ### Author: Scott Krotee - July 23rd, 2024 ###
- 
+
 import requests
 from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
@@ -51,6 +51,13 @@ headers, rows = scrape_ncaa_soccer_stats(url)
 if headers and rows:
     # Create a DataFrame from the scraped data
     df = pd.DataFrame(rows, columns=headers)
+    
+    # Debugging: Print the columns to verify correct extraction
+    print("Extracted columns:", df.columns)
+
+    # Convert relevant columns to numeric for plotting
+    df['Saves'] = pd.to_numeric(df['Saves'], errors='coerce')
+    df['Pct.'] = pd.to_numeric(df['Pct.'].str.rstrip('%'), errors='coerce')  # Remove '%' and convert to float
 
     # Plotting the table using Matplotlib
     fig, ax = plt.subplots(figsize=(14, 10))
@@ -85,6 +92,19 @@ if headers and rows:
         cell.set_edgecolor('white')
         cell.set_linewidth(1.5)
 
+    plt.show()
+
+    # Plotting the scatter plot of Saves vs. Save Percentage with goalkeeper names
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(df['Saves'], df['Pct.'], color='blue')
+
+    for i, row in df.iterrows():
+        ax.annotate(row['Name'], (row['Saves'], row['Pct.']), textcoords="offset points", xytext=(0,10), ha='center')
+
+    ax.set_title('Goalkeepers: Saves vs. Save Percentage')
+    ax.set_xlabel('Saves')
+    ax.set_ylabel('Save Percentage')
+    plt.grid(True)
     plt.show()
 else:
     print("No data to display.")
