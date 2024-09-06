@@ -1,12 +1,12 @@
-### Author: Scott Krotee - July 23rd, 2024 ###
-
 import requests
 from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
 import pandas as pd
+import math
 
-# URL to scrape top 50 NCAA goalkeeper stats
-url = 'https://www.ncaa.com/stats/soccer-men/d1/current/individual/421'
+# Base URL and page identifiers for top 50 NCAA goalkeeper stats
+base_url = 'https://www.ncaa.com/stats/soccer-men/d1/current/individual/421/'
+pages = ['p1', 'p2', 'p3']  # Page identifiers
 
 def scrape_ncaa_soccer_stats(url):
     try:
@@ -45,12 +45,26 @@ def scrape_ncaa_soccer_stats(url):
         print(f'An error occurred: {e}')
         return None, None
 
-# Call the function with the URL
-headers, rows = scrape_ncaa_soccer_stats(url)
+# Initialize an empty list to collect all the data
+all_rows = []
+all_headers = None
 
-if headers and rows:
-    # Create a DataFrame from the scraped data
-    df = pd.DataFrame(rows, columns=headers)
+# Loop through each page and scrape the data
+for page in pages:
+    url = base_url + page
+    headers, rows = scrape_ncaa_soccer_stats(url)
+    
+    if headers and rows:
+        all_headers = headers  # Save headers once
+        all_rows.extend(rows)  # Collect rows from all pages
+
+if all_headers and all_rows:
+    # Create a DataFrame from the concatenated data
+    df = pd.DataFrame(all_rows, columns=all_headers)
+    
+    # Save the DataFrame to a CSV file
+    df.to_csv('ncaa_goalkeeper_stats.csv', index=False)
+    print("Data saved to ncaa_goalkeeper_stats.csv")
     
     # Debugging: Print the columns to verify correct extraction
     print("Extracted columns:", df.columns)
@@ -59,52 +73,72 @@ if headers and rows:
     df['Saves'] = pd.to_numeric(df['Saves'], errors='coerce')
     df['Pct.'] = pd.to_numeric(df['Pct.'].str.rstrip('%'), errors='coerce')  # Remove '%' and convert to float
 
-    # Plotting the table using Matplotlib
-    fig, ax = plt.subplots(figsize=(14, 10))
-    ax.axis('tight')
-    ax.axis('off')
+    ### Pagination Function ###
+    def display_paginated_table(df, rows_per_page=50):
+        total_pages = math.ceil(len(df) / rows_per_page)
+        
+        for page in range(total_pages):
+            start_row = page * rows_per_page
+            end_row = start_row + rows_per_page
+            df_chunk = df.iloc[start_row:end_row]  # Get the subset of the DataFrame
 
-    # Create table with the DataFrame values
-    table = ax.table(cellText=df.values, colLabels=df.columns, cellLoc='center', loc='center')
+            fig, ax = plt.subplots(figsize=(18, 12))
+            ax.axis('tight')
+            ax.axis('off')
 
-    # Styling the table
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1.2, 1.2)
+            # Create the table for the current chunk
+            table = ax.table(cellText=df_chunk.values, colLabels=df_chunk.columns, cellLoc='center', loc='center')
 
-    # Set table background color
-    fig.patch.set_facecolor('black')
-    ax.patch.set_facecolor('black')
+            # Styling the table
+            table.auto_set_font_size(False)
+            table.set_fontsize(10)
+            table.scale(1.5, 1.5)
 
-    # Set the color of the cells
-    for (i, j), cell in table.get_celld().items():
-        if i == 0:
-            cell.set_facecolor('grey')
-            cell.set_fontsize(12)
-            cell.set_text_props(weight='bold', color='white')
-        else:
-            cell.set_facecolor('lightgrey' if i % 2 == 0 else 'darkgrey')
-            cell.set_text_props(color='black')
+            fig.patch.set_facecolor('black')
+            ax.patch.set_facecolor('black')
 
-    # Set the color of the lines
-    table.auto_set_column_width(col=list(range(len(headers))))
-    for cell in table.get_celld().values():
-        cell.set_edgecolor('white')
-        cell.set_linewidth(1.5)
+            for (i, j), cell in table.get_celld().items():
+                if i == 0:
+                    cell.set_facecolor('#333333')
+                    cell.set_fontsize(12)
+                    cell.set_text_props(weight='bold', color='white')
+                else:
+                    cell.set_facecolor('#E6E6E6' if i % 2 == 0 else '#F2F2F2')
+                    cell.set_text_props(color='black')
 
-    plt.show()
+            table.auto_set_column_width(col=list(range(len(df.columns))))
+            for cell in table.get_celld().values():
+                cell.set_edgecolor('white')
+                cell.set_linewidth(1.5)
 
-    # Plotting the scatter plot of Saves vs. Save Percentage with goalkeeper names
+            plt.title(f'Top NCAA Goalkeepers Stats (Page {page + 1})', fontsize=20, color='white', pad=20)
+            plt.show()
+
+    # Call the function to display the table in paginated format
+    display_paginated_table(df)
+
+    ### Scatter Plot Visualization ###
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.scatter(df['Saves'], df['Pct.'], color='blue')
+    scatter = ax.scatter(df['Saves'], df['Pct.'], color='darkblue', edgecolor='white', s=100, alpha=0.75)
 
+    # Annotate each point with the goalkeeper's name
     for i, row in df.iterrows():
-        ax.annotate(row['Name'], (row['Saves'], row['Pct.']), textcoords="offset points", xytext=(0,10), ha='center')
+        ax.annotate(row['Name'], (row['Saves'], row['Pct.']), textcoords="offset points", xytext=(0,10), ha='center', fontsize=9)
 
-    ax.set_title('Goalkeepers: Saves vs. Save Percentage')
-    ax.set_xlabel('Saves')
-    ax.set_ylabel('Save Percentage')
-    plt.grid(True)
+    # Set grid and labels for scatter plot
+    ax.set_title('Goalkeepers: Saves vs. Save Percentage', fontsize=16)
+    ax.set_xlabel('Saves', fontsize=12)
+    ax.set_ylabel('Save Percentage (%)', fontsize=12)
+    plt.grid(True, which='both', linestyle='--', linewidth=0.7, alpha=0.7)
+
+    # Customize axes
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_color('grey')
+    ax.spines['left'].set_color('grey')
+    ax.tick_params(colors='grey', which='both')
+
     plt.show()
+
 else:
     print("No data to display.")
