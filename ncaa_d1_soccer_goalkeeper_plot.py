@@ -1,8 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
-import matplotlib.pyplot as plt
 import pandas as pd
-import math
+import plotly.graph_objects as go
 
 # Base URL and page identifiers for top 50 NCAA goalkeeper stats
 base_url = 'https://www.ncaa.com/stats/soccer-men/d1/current/individual/421/'
@@ -66,79 +65,73 @@ if all_headers and all_rows:
     df.to_csv('ncaa_goalkeeper_stats.csv', index=False)
     print("Data saved to ncaa_goalkeeper_stats.csv")
     
-    # Debugging: Print the columns to verify correct extraction
-    print("Extracted columns:", df.columns)
-
     # Convert relevant columns to numeric for plotting
     df['Saves'] = pd.to_numeric(df['Saves'], errors='coerce')
     df['Pct.'] = pd.to_numeric(df['Pct.'].str.rstrip('%'), errors='coerce')  # Remove '%' and convert to float
 
-    ### Pagination Function ###
-    def display_paginated_table(df, rows_per_page=50):
-        total_pages = math.ceil(len(df) / rows_per_page)
-        
-        for page in range(total_pages):
-            start_row = page * rows_per_page
-            end_row = start_row + rows_per_page
-            df_chunk = df.iloc[start_row:end_row]  # Get the subset of the DataFrame
+    ### Display Dark Mode Table Using Plotly ###
+    def display_table(df):
+        fig = go.Figure(data=[go.Table(
+            header=dict(values=list(df.columns),
+                        fill_color='black',
+                        font=dict(color='white', size=12),
+                        align='left'),
+            cells=dict(values=[df[col] for col in df.columns],
+                       fill_color='darkslategray',
+                       font=dict(color='white', size=11),
+                       align='left'))
+        ])
 
-            fig, ax = plt.subplots(figsize=(18, 12))
-            ax.axis('tight')
-            ax.axis('off')
+        fig.update_layout(
+            title='Top NCAA Goalkeepers Stats (Dark Mode)',
+            title_x=0.5,
+            paper_bgcolor='black',
+            font=dict(color='white')
+        )
+        fig.show()
 
-            # Create the table for the current chunk
-            table = ax.table(cellText=df_chunk.values, colLabels=df_chunk.columns, cellLoc='center', loc='center')
+    ### Scatter Plot Using Plotly ###
+    def display_scatter(df):
+        fig = go.Figure()
 
-            # Styling the table
-            table.auto_set_font_size(False)
-            table.set_fontsize(10)
-            table.scale(1.5, 1.5)
+        # Create hover text using the available columns
+        hover_text = [
+            f"Name: {row['Name']}<br>Team: {row['Team']}<br>Saves: {row['Saves']}<br>GA: {row['GA']}<br>Minutes Played: {row['Goalie Min. Plyd']}<br>Save Pct: {row['Pct.']}"
+            for i, row in df.iterrows()
+        ]
 
-            fig.patch.set_facecolor('black')
-            ax.patch.set_facecolor('black')
+        # Scatter plot with player names shown on the plot
+        fig.add_trace(go.Scatter(
+            x=df['Saves'], y=df['Pct.'], 
+            mode='markers+text',  # markers and text
+            marker=dict(size=10, color='blue', opacity=0.7, line=dict(width=2, color='white')),
+            text=df['Name'],  # Display player name directly on the plot
+            textposition='top center',  # Position text above the markers
+            textfont=dict(color='white'),  # Text color
+            hovertext=hover_text,  # Use custom hover text
+            hoverinfo='text'  # Show only the hover text
+        ))
 
-            for (i, j), cell in table.get_celld().items():
-                if i == 0:
-                    cell.set_facecolor('#333333')
-                    cell.set_fontsize(12)
-                    cell.set_text_props(weight='bold', color='white')
-                else:
-                    cell.set_facecolor('#E6E6E6' if i % 2 == 0 else '#F2F2F2')
-                    cell.set_text_props(color='black')
+        # Set plot background and styles
+        fig.update_layout(
+            title='Goalkeepers: Saves vs. Save Percentage',
+            xaxis_title='Saves',
+            yaxis_title='Save Percentage (%)',
+            plot_bgcolor='black',
+            paper_bgcolor='black',
+            font=dict(color='white')
+        )
 
-            table.auto_set_column_width(col=list(range(len(df.columns))))
-            for cell in table.get_celld().values():
-                cell.set_edgecolor('white')
-                cell.set_linewidth(1.5)
+        fig.update_xaxes(showgrid=False, zeroline=False, color='white')
+        fig.update_yaxes(showgrid=False, zeroline=False, color='white')
 
-            plt.title(f'Top NCAA Goalkeepers Stats (Page {page + 1})', fontsize=20, color='white', pad=20)
-            plt.show()
+        fig.show()
 
-    # Call the function to display the table in paginated format
-    display_paginated_table(df)
+    # Display the dark mode table
+    display_table(df)
 
-    ### Scatter Plot Visualization ###
-    fig, ax = plt.subplots(figsize=(10, 6))
-    scatter = ax.scatter(df['Saves'], df['Pct.'], color='darkblue', edgecolor='white', s=100, alpha=0.75)
-
-    # Annotate each point with the goalkeeper's name
-    for i, row in df.iterrows():
-        ax.annotate(row['Name'], (row['Saves'], row['Pct.']), textcoords="offset points", xytext=(0,10), ha='center', fontsize=9)
-
-    # Set grid and labels for scatter plot
-    ax.set_title('Goalkeepers: Saves vs. Save Percentage', fontsize=16)
-    ax.set_xlabel('Saves', fontsize=12)
-    ax.set_ylabel('Save Percentage (%)', fontsize=12)
-    plt.grid(True, which='both', linestyle='--', linewidth=0.7, alpha=0.7)
-
-    # Customize axes
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_color('grey')
-    ax.spines['left'].set_color('grey')
-    ax.tick_params(colors='grey', which='both')
-
-    plt.show()
+    # Display the scatter plot
+    display_scatter(df)
 
 else:
     print("No data to display.")
