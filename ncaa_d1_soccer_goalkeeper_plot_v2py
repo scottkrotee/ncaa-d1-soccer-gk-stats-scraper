@@ -1,0 +1,197 @@
+### Author: Scott Krotee - Sept 7, 2024 ###
+
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+import plotly.graph_objects as go
+
+# Base URL and page identifiers for top 50 NCAA goalkeeper stats
+base_url = 'https://www.ncaa.com/stats/soccer-men/d1/current/individual/421/'
+pages = ['p1', 'p2', 'p3']  # Page identifiers
+
+def scrape_ncaa_soccer_stats(url):
+    try:
+        # Send a GET request to the URL
+        response = requests.get(url)
+        response.raise_for_status()  # Raises an HTTPError if the response status code is 4XX/5XX
+
+        # Parse the HTML content of the page
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Find the table containing the statistics
+        stats_table = soup.find('table')
+        if not stats_table:
+            print("Statistics table not found.")
+            return None, None
+
+        # Extract headers
+        headers = [header.text.strip() for header in stats_table.find_all('th')]
+
+        # Extract rows
+        rows = []
+        for row in stats_table.find_all('tr')[1:]:  # skip the header row
+            cols = row.find_all('td')
+            cols = [ele.text.strip() for ele in cols]
+            rows.append(cols)
+        
+        return headers, rows
+
+    except requests.HTTPError as e:
+        print(f'HTTP Error occurred: {e.response.status_code}')
+        return None, None
+    except requests.RequestException as e:
+        print(f'Request exception: {e}')
+        return None, None
+    except Exception as e:
+        print(f'An error occurred: {e}')
+        return None, None
+
+# Initialize an empty list to collect all the data
+all_rows = []
+all_headers = None
+
+# Loop through each page and scrape the data
+for page in pages:
+    url = base_url + page
+    headers, rows = scrape_ncaa_soccer_stats(url)
+    
+    if headers and rows:
+        all_headers = headers  # Save headers once
+        all_rows.extend(rows)  # Collect rows from all pages
+
+if all_headers and all_rows:
+    # Create a DataFrame from the concatenated data
+    df = pd.DataFrame(all_rows, columns=all_headers)
+    
+    # Save the DataFrame to a CSV file
+    df.to_csv('ncaa_goalkeeper_stats.csv', index=False)
+    print("Data saved to ncaa_goalkeeper_stats.csv")
+    
+    # Convert relevant columns to numeric for analysis
+    df['Saves'] = pd.to_numeric(df['Saves'], errors='coerce')
+    df['Pct.'] = pd.to_numeric(df['Pct.'].str.rstrip('%'), errors='coerce')  # Remove '%' and convert to float
+    df['GA'] = pd.to_numeric(df['GA'], errors='coerce')
+    df['Goalie Min. Plyd'] = pd.to_numeric(df['Goalie Min. Plyd'], errors='coerce')
+
+    # Calculate the rank of each goalkeeper based on Saves, Save Percentage, and Minutes Played
+    df['Saves_rank'] = df['Saves'].rank(ascending=False)  # Higher saves should rank higher
+    df['Pct_rank'] = df['Pct.'].rank(ascending=False)  # Higher save percentage should rank higher
+    df['Minutes_rank'] = df['Goalie Min. Plyd'].rank(ascending=False)  # More minutes should rank higher
+
+    # Calculate the average rank across these 3 categories
+    df['Avg_rank'] = df[['Saves_rank', 'Pct_rank', 'Minutes_rank']].mean(axis=1)
+
+    # Sort the DataFrame by Avg_rank to identify top performers
+    df = df.sort_values(by='Avg_rank')
+
+    ### Dark Themed Table Display ###
+    def display_table(df):
+        fig = go.Figure(data=[go.Table(
+            header=dict(values=list(df.columns),
+                        fill_color='black',
+                        font=dict(color='white', size=12),
+                        align='left'),
+            cells=dict(values=[df[col] for col in df.columns],
+                       fill_color='darkslategray',
+                       font=dict(color='white', size=11),
+                       align='left'))
+        ])
+
+        fig.update_layout(
+            title='Top NCAA Goalkeepers (Ranked by Saves, Save Percentage, and Minutes)',
+            title_x=0.5,
+            paper_bgcolor='black',
+            font=dict(color='white')
+        )
+        fig.show()
+
+    ### Scatter Plot with Name Display Logic and Correct Hover Text ###
+    def display_scatter(df):
+        fig = go.Figure()
+
+        # Identify top 3 goalkeepers by Avg_rank
+        top_3 = df.head(3)
+        top_3_names = top_3['Name'].tolist()
+
+        ### Hover Text Creation ###
+        hover_text = [
+            f"Name: {row['Name']}<br>Team: {row['Team']}<br>Saves: {row['Saves']}<br>GA: {row['GA']}<br>Minutes Played: {row['Goalie Min. Plyd']}<br>Save Pct: {row['Pct.']}<br>Avg Rank: {row['Avg_rank']:.2f}"
+            for i, row in df.iterrows()
+        ]
+
+        # Marker size for goalkeepers (larger for top 3)
+        marker_size = [14 if row['Name'] in top_3_names else 10 for i, row in df.iterrows()]
+
+        # Scatter plot for all goalkeepers, excluding top 3 from white text
+        fig.add_trace(go.Scatter(
+            x=df['Saves'][~df['Name'].isin(top_3_names)],  # Exclude top 3 from being labeled in white
+            y=df['Pct.'][~df['Name'].isin(top_3_names)], 
+            mode='markers+text',  # Markers and text
+            marker=dict(size=10, color=df['Avg_rank'], colorscale='Viridis', opacity=0.8, line=dict(width=2, color='white')),
+            text=df['Name'][~df['Name'].isin(top_3_names)],  # Display player name directly on the plot
+            textposition='top center',  # Position the label on top
+            hovertext=hover_text,  # Use custom hover text
+            hoverinfo='text',  # Show only the hover text
+            textfont=dict(size=14)  # Increase text size
+        ))
+
+        # Add the top 3 goalkeepers' dots separately and label them in yellow
+        fig.add_trace(go.Scatter(
+            x=df['Saves'][df['Name'].isin(top_3_names)],
+            y=df['Pct.'][df['Name'].isin(top_3_names)],
+            mode='markers',  # Only dots, no white text
+            marker=dict(size=14, color='yellow', opacity=0.9, line=dict(width=2, color='white')),
+            hovertext=hover_text,  # Use custom hover text
+            hoverinfo='text'  # Show only the hover text
+        ))
+
+        # Highlight the top 3 goalkeepers with yellow annotations only
+        for i, row in top_3.iterrows():
+            fig.add_annotation(
+                x=row['Saves'], y=row['Pct.'],
+                text=row['Name'],  # Show player name for top 3
+                showarrow=True,
+                arrowhead=2,
+                ax=-20,
+                ay=-30,
+                font=dict(size=26, color="yellow")  # Increase annotation text size
+            )
+
+        # Move the red label slightly up to avoid distortion
+        fig.add_annotation(
+            x=(top_3['Saves'].mean()),  # Center horizontally above the top 3 players
+            y=(top_3['Pct.'].max() + 0.03),  # Moved up slightly from +0.02 to +0.03
+            text="Top NCAA Goalkeepers (Best Avg Rank)",
+            showarrow=False,
+            font=dict(size=18, color="red"),  # Customize font size and color
+            bgcolor="rgba(50, 50, 50, 0.6)",  # Semi-transparent background
+            bordercolor="white",
+            borderwidth=2,
+            borderpad=10
+        )
+
+        # Set plot background and styles
+        fig.update_layout(
+            title='Saves vs. Save Percentage (Top Goalkeepers by Avg Rank)',
+            xaxis_title='Saves',
+            yaxis_title='Save Percentage (%)',
+            plot_bgcolor='black',
+            paper_bgcolor='black',
+            font=dict(color='white'),
+            autosize=True,  # Automatically adjust to full screen
+            width=None,  # Let it scale to full width
+            height=None,  # Let it scale to full height
+            margin=dict(l=0, r=0, t=50, b=0),  # Remove all margins for full screen
+        )
+
+        fig.update_xaxes(showgrid=False, zeroline=False, color='white')
+        fig.update_yaxes(showgrid=False, zeroline=False, color='white', range=[0.65, 1])  # Adjust y-axis limits for better scaling
+
+        fig.show()
+
+    # Call both functions
+    display_table(df)  # Display the table
+    display_scatter(df)  # Display the scatter plot
+
+else:
+    print("No data to display.")
