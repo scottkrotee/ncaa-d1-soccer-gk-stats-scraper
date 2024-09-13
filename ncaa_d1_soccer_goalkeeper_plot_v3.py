@@ -1,9 +1,8 @@
-### Author: Scott Krotee - Sept 7, 2024 ###
-
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import plotly.graph_objects as go
+import numpy as np
 
 # Base URL and page identifiers for top 50 NCAA goalkeeper stats
 base_url = 'https://www.ncaa.com/stats/soccer-men/d1/current/individual/421/'
@@ -106,7 +105,7 @@ if all_headers and all_rows:
         fig.add_trace(go.Scatter(
             x=df['Saves'], y=df['Pct.'], 
             mode='markers+text',  # markers and text
-            marker=dict(size=10, color='blue', opacity=0.7, line=dict(width=2, color='white')),
+            marker=dict(size=18, color='blue', opacity=0.7, line=dict(width=2, color='white')),
             text=df['Name'],  # Display player name directly on the plot
             textposition='top center',  # Position text above the markers
             textfont=dict(color='white'),  # Text color
@@ -114,7 +113,7 @@ if all_headers and all_rows:
             hoverinfo='text'  # Show only the hover text
         ))
 
-        # Set plot background and styles
+        # Set plot background and styles with faint gridlines
         fig.update_layout(
             title='Goalkeepers: Saves vs. Save Percentage',
             xaxis_title='Saves',
@@ -124,8 +123,26 @@ if all_headers and all_rows:
             font=dict(color='white')
         )
 
-        fig.update_xaxes(showgrid=False, zeroline=False, color='white')
-        fig.update_yaxes(showgrid=False, zeroline=False, color='white')
+        # Update x and y axes with faint gridlines
+        fig.update_xaxes(showgrid=True, gridwidth=0.5, gridcolor='rgba(255,255,255,0.1)', zeroline=False, color='white')
+        fig.update_yaxes(showgrid=True, gridwidth=0.5, gridcolor='rgba(255,255,255,0.1)', zeroline=False, color='white')
+
+
+        # Add label box for 'High Impact Goalkeepers' slightly lower
+        max_saves = df['Saves'].max()
+        max_pct = df['Pct.'].max()
+
+        fig.add_annotation(
+            x=max_saves - 5,  # Place the label just to the left of the highest Saves
+            y=max_pct - 0.02,  # Lower the label closer to the top-performing goalkeepers
+            text="High Impact Goalkeepers",
+            showarrow=False,
+            font=dict(size=20, color="red"),  # Customize font size and color
+            bgcolor="rgba(50, 50, 50, 0.6)",  # Semi-transparent background
+            bordercolor="white",
+            borderwidth=2,
+            borderpad=10
+        )
 
         fig.show()
 
